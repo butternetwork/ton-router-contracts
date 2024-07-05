@@ -1,0 +1,8 @@
+
+builder create_msg(int flags, slice to_address, int value) inline {
+    return begin_cell()
+        .store_uint(flags, 6)
+        .store_slice(to_address)
+        .store_coins(value)
+        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
+}

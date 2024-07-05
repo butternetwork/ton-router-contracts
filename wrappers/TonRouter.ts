@@ -11,7 +11,8 @@ export function tonRouterConfigToCell(config: TonRouterConfig): Cell {
 
 export const Opcodes = {
     increase: 0x7e8764ef,
-    swap: 0x7e8764ee,
+    withdraw: 0xcb03bfaf,
+    swap: 0xca2663c4,
 };
 
 export class TonRouter implements Contract {
@@ -54,6 +55,44 @@ export class TonRouter implements Contract {
                 .storeUint(Opcodes.swap, 32)
                 .storeUint(opts.queryID ?? 0, 64)
                 .storeUint(opts.increaseBy, 32)
+                .endCell(),
+        });
+    }
+
+    async sendWithdraw(
+        provider: ContractProvider,
+        via: Sender,
+        opts: {
+            value: bigint;
+            queryID?: number;
+        },
+    ) {
+        await provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(Opcodes.withdraw, 32)
+                .storeUint(opts.queryID ?? 0, 64)
+                .endCell(),
+        });
+    }
+
+    async sendSwap(
+        provider: ContractProvider,
+        via: Sender,
+        opts: {
+            body: Cell;
+            value: bigint;
+            queryID?: number;
+        },
+    ) {
+        await provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(Opcodes.swap, 32)
+                .storeUint(opts.queryID ?? 0, 64)
+                .storeRef(opts.body)
                 .endCell(),
         });
     }

@@ -13,7 +13,7 @@ export async function run(provider: NetworkProvider) {
         )
     );
 
-    await tonRouter.sendDeploy(provider.sender(), toNano('0.05'));
+    await tonRouter.sendDeploy(provider.sender(), toNano('0.08'));
 
     await provider.waitForDeploy(tonRouter.address);
 

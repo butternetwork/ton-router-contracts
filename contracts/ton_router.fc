@@ -1,6 +1,9 @@
 #include "imports/stdlib.fc";
+#include "common.fc";
 
 const op::increase = "op::increase"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
+const op::withdraw = "op::withdraw"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
+const op::swap = "op::swap"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
 
 ;; storage variables
 
@@ -29,18 +32,9 @@ global int ctx_counter;
     );
 }
 
-
-const slice TON_VAULT_ADDR = "EQDa4VOnTYlLvDJ0gZjNYm5PXfSmmtL6Vs6A_CZEtXCNICq_"a;
-
-;; Where to send bought jettons?
-const slice RECIPIENT_ADDR = "UQCcgIOWXxRpCWmQ8n2QLC2crtysNNjIAXzfhuqmVJEBH7Dl"a;
-
-;; Can be taken from DeDust.io: https://dedust.io/earn/<pool_addr>
-const slice TON_SCALE_POOL_ADDR = "EQDcm06RlreuMurm-yik9WbL6kI617B77OrSRF_ZjoCYFuny"a;
-
-const int MIN_BALANCE = 100000000; ;; 0.1 TON
-const int MIN_TRADE_AMOUNT = 100000000; ;; 1 TON
-const int TRADE_FEE = 200000000; ;; 0.2 TON
+const int MIN_BALANCE = 0; ;; 0.1 TON
+const int MIN_TRADE_AMOUNT = 0; ;; 1 TON
+const int TRADE_FEE = 2000000; ;; 0.2 TON
 const int msg_flag::bounceable = 0x18;
 const int ton_vault::swap = 0xea06185d;
 slice addr_none() asm "b{00} PUSHSLICE";
@@ -57,76 +51,30 @@ slice addr_none() asm "b{00} PUSHSLICE";
         return ();
     }
 
+    slice sender_address = cs~load_msg_addr();
+
     load_data(); ;; here we populate the storage variables
 
     int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
     int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
 
-    if (op == op::increase) {
-        int increase_by = in_msg_body~load_uint(32);
-        ctx_counter += increase_by;
-        save_data();
+    if (op == op::withdraw) {
+        raw_reserve(10000000, 2);
+        builder msg = create_msg(msg_flag::bounceable, sender_address, 0);
+        send_raw_message(msg.end_cell(), 128);
         return ();
-    } else {
+    }
+
+    if (op == op::swap) {
+        cell body = in_msg_body~load_ref();
+
         int trade_value = my_balance - MIN_BALANCE;
         if (trade_value < MIN_TRADE_AMOUNT + TRADE_FEE) {
-            ;; NOTE: Ignore messages if balance is too low.
             throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
         }
-        ;; cell swap_msg = begin_cell()
-            ;; .store_uint(0, 32)
-        ;; .end_cell();
 
-        ;; cell call_msg = begin_cell()
-        ;;     .store_uint(0xea06185d, 32)
-        ;;     .store_uint(0, 64)
-        ;;     .store_coins(1000000)
-        ;;     .store_slice(""a)
-        ;;     .store_uint(0, 1)
-        ;;     .store_coins(100)
-        ;;     .store_int(0, 1)
-        ;;     .store_ref(swap_msg)
-        ;; .end_cell();
+        send_raw_message(body, 0);
 
-        ;; send_raw_message(begin_cell()
-        ;;     .store_uint(0x18, 6)
-        ;;     .store_slice("EQDa4VOnTYlLvDJ0gZjNYm5PXfSmmtL6Vs6A_CZEtXCNICq_"a)
-        ;;     .store_coins(500000000)
-        ;;     .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1)
-        ;;     .store_uint(1, 1)
-        ;;     .store_ref(call_msg)
-        ;;     .end_cell(),
-        ;;     64);
-        cell body = begin_cell()
-            .store_uint(ton_vault::swap, 32)
-            .store_uint(0, 64) ;; query_id:int64
-            .store_coins(trade_value - TRADE_FEE) ;; amount:Coins # subtract gas
-        ;; _:SwapStep
-            .store_slice(TON_SCALE_POOL_ADDR) ;; pool_addr:MsgAddressInt
-            .store_uint(0, 1) ;; kind:SwapKind
-            .store_coins(0) ;; limit:Coins
-            .store_maybe_ref(null()) ;; next:(Maybe ^SwapStep)
-        ;; swap_params:^SwapParams
-            .store_ref(
-                begin_cell()
-                    .store_uint(now() + 60 * 5, 32) ;; deadline:Timestamp # 5 min
-                    .store_slice(RECIPIENT_ADDR) ;; recipient_addr:MsgAddressInt
-                    .store_slice(addr_none()) ;; referral_addr:MsgAddress
-                    .store_maybe_ref(null()) ;; fulfill_payload:(Maybe ^Cell)
-                    .store_maybe_ref(null()) ;; reject_payload:(Maybe ^Cell)
-                    .end_cell()
-            )
-            .end_cell();
-        send_raw_message(
-            begin_cell()
-                .store_uint(msg_flag::bounceable, 6)
-                .store_slice(TON_VAULT_ADDR)
-                .store_coins(trade_value)
-                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1)
-                .store_maybe_ref(body)
-                .end_cell(),
-            0
-        );
         return ();
     }
 
