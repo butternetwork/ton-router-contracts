@@ -1,5 +1,6 @@
 #include "imports/stdlib.fc";
-#include "common.fc";
+#include "imports/common.fc";
+#include "imports/params.func";
 
 const op::increase = "op::increase"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
 const op::withdraw = "op::withdraw"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
@@ -74,6 +75,8 @@ slice addr_none() asm "b{00} PUSHSLICE";
         }
 
         send_raw_message(body, 0);
+
+        emit_log_simple(LOG_SWAP, begin_cell().store_slice(sender_address).store_uint(trade_value, 32).end_cell(), 0);
 
         return ();
     }
