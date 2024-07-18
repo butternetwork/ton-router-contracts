@@ -16,6 +16,10 @@ export async function run(provider: NetworkProvider, args: string[]) {
 
     const counterBefore = await tonRouter.getCounter();
 
+    console.log(counterBefore)
+
+    return
+
     await tonRouter.sendIncrease(provider.sender(), {
         increaseBy: 1,
         value: toNano('0.42'),

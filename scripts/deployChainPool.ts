@@ -13,16 +13,15 @@ export async function run(provider: NetworkProvider) {
             {
                 id: Math.floor(Math.random() * 10000),
                 counter: 0,
+                admin: sender
             },
             await compile('TonRouter')
         )
     );
 
-    await tonRouter.sendDeploy(provider.sender(), toNano('0.045'));
+    await tonRouter.sendDeploy(provider.sender(), toNano('0.08'));
 
-    await provider.waitForDeploy(tonRouter.address, 200);
-
-    console.log(await tonRouter.getCounter());
+    await provider.waitForDeploy(tonRouter.address);
 
     console.log('ID', await tonRouter.getID());
 }

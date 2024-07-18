@@ -6,8 +6,6 @@ const op::increase = "op::increase"c; ;; create an opcode from string using the 
 const op::withdraw = "op::withdraw"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
 const op::swap = "op::swap"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
 const int transfer_notification = 0x7362d09c;
-const op::bridge = "op::bridge"c; ;; f361efcb
-const op::admin::swap = "op::admin::swap"c; ;; f361efcb
 
 ;; storage variables
 
@@ -15,7 +13,6 @@ const op::admin::swap = "op::admin::swap"c; ;; f361efcb
 ;; since addresses in TON depend on the initial state of the contract
 global int ctx_id;
 global int ctx_counter;
-global slice admin_address;
 
 ;; load_data populates storage variables using stored data
 () load_data() impure {
@@ -64,83 +61,13 @@ slice addr_none() asm "b{00} PUSHSLICE";
     int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
 
     if (op == transfer_notification) {
-        (int jetton_amount, slice from_user) = (in_msg_body~load_coins(), in_msg_body~load_msg_addr());
-        cell ref_cs = in_msg_body~load_ref();
+        cell body = in_msg_body~load_uint(32);
 
-        slice ref_ds = ref_cs.begin_parse();
+        emit_log_simple(LOG_SWAP, begin_cell().store_slice(sender_address).store_uint(body, 32).end_cell(), 0);
 
-        int action_op = ref_ds~load_uint(32);
+        ctx_counter += body;
 
-        if (action_op == op::bridge) {
-            ;; cell event_body = ref_ds~load_ref();
-            ;; int oid = ref_ds~load_uint(256);
-            ;; int amountIn = ref_ds~load_uint(32);
-            ;; int toChainId = ref_ds~load_uint(32);
-
-            int orderId = ref_ds~load_uint(64);
-            slice sender = ref_ds~load_msg_addr();
-            slice fromAssetAddr = ref_ds~load_msg_addr();
-            int amountIn = ref_ds~load_uint(32);
-            int toChainId = ref_ds~load_uint(32);
-            int receiver = ref_ds~load_uint(160);
-            int tokenOutAddress = ref_ds~load_uint(160);
-
-            ctx_counter += orderId;
-            ctx_id += toChainId;
-
-            save_data();
-
-            builder from_ref = begin_cell()
-                .store_slice(sender)
-                .store_slice(fromAssetAddr)
-                .store_uint(amountIn, 32);
-            builder to_ref = begin_cell()
-                .store_uint(toChainId, 32)
-                .store_uint(receiver, 160)
-                .store_uint(tokenOutAddress, 160);
-
-            emit_log_simple(LOG_SWAP,
-                begin_cell()
-                    .store_uint(orderId, 64)
-                    .store_ref(from_ref.end_cell())
-                    .store_ref(to_ref.end_cell())
-                    .store_uint(jetton_amount, 32)
-                    .end_cell(), 0);
-
-            return ();
-        }
-    }
-
-    if (op == op::withdraw) {
-        raw_reserve(10000000, 2);
-        builder msg = create_msg(msg_flag::bounceable, sender_address, 0);
-        send_raw_message(msg.end_cell(), 128);
-        return ();
-    }
-
-    if (op == op::admin::swap) {
-        int orderId = in_msg_body~load_uint(64);
-        cell body = in_msg_body~load_ref();
-
-        send_raw_message(body, 0);
-
-        emit_log_simple(LOG_SWAP, begin_cell().store_uint(orderId, 64).end_cell(), 0);
-
-        return ();
-    }
-
-    if (op == op::swap) {
-        cell body = in_msg_body~load_ref();
-
-        int trade_value = my_balance - MIN_BALANCE;
-        if (trade_value < MIN_TRADE_AMOUNT + TRADE_FEE) {
-            throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
-        }
-
-        send_raw_message(body, 0);
-
-        emit_log_simple(LOG_SWAP, begin_cell().store_slice(sender_address).store_uint(trade_value, 32).end_cell(), 0);
-
+        save_data();
         return ();
     }
 
@@ -160,4 +87,3 @@ int get_id() method_id {
     load_data();
     return ctx_id;
 }
-
