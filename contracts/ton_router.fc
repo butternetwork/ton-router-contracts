@@ -1,13 +1,7 @@
 #include "imports/stdlib.fc";
 #include "imports/common.fc";
 #include "imports/params.func";
-
-const op::increase = "op::increase"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
-const op::withdraw = "op::withdraw"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
-const op::swap = "op::swap"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
-const int transfer_notification = 0x7362d09c;
-const op::bridge = "op::bridge"c; ;; f361efcb
-const op::admin::swap = "op::admin::swap"c; ;; f361efcb
+#include "imports/error-codes.fc";
 
 ;; storage variables
 
@@ -15,7 +9,11 @@ const op::admin::swap = "op::admin::swap"c; ;; f361efcb
 ;; since addresses in TON depend on the initial state of the contract
 global int ctx_id;
 global int ctx_counter;
-global slice admin_address;
+global int ctx_order_id;
+global slice ctx_owner;
+global slice ctx_withdrawer;
+global slice ctx_bridger;
+global slice ctx_bridge_token_address;
 
 ;; load_data populates storage variables using stored data
 () load_data() impure {
@@ -23,6 +21,13 @@ global slice admin_address;
 
     ctx_id = ds~load_uint(32);
     ctx_counter = ds~load_uint(32);
+    ctx_order_id = ds~load_uint(64);
+    ctx_owner = ds~load_msg_addr();
+
+    var addresses_slice = ds~load_ref().begin_parse();
+    ctx_withdrawer = addresses_slice~load_msg_addr();
+    ctx_bridger = addresses_slice~load_msg_addr();
+    ctx_bridge_token_address = addresses_slice~load_msg_addr();
 
     ds.end_parse();
 }
@@ -33,16 +38,17 @@ global slice admin_address;
         begin_cell()
             .store_uint(ctx_id, 32)
             .store_uint(ctx_counter, 32)
+            .store_uint(ctx_order_id, 64)
+            .store_slice(ctx_owner)
+            .store_ref(begin_cell()
+                .store_slice(ctx_withdrawer)
+                .store_slice(ctx_bridger)
+                .store_slice(ctx_bridge_token_address)
+                .end_cell()
+            )
             .end_cell()
     );
 }
-
-const int MIN_BALANCE = 0; ;; 0.1 TON
-const int MIN_TRADE_AMOUNT = 0; ;; 1 TON
-const int TRADE_FEE = 2000000; ;; 0.2 TON
-const int msg_flag::bounceable = 0x18;
-const int ton_vault::swap = 0xea06185d;
-slice addr_none() asm "b{00} PUSHSLICE";
 
 ;; recv_internal is the main function of the contract and is called when it receives a message from other contracts
 () recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
@@ -65,83 +71,122 @@ slice addr_none() asm "b{00} PUSHSLICE";
 
     if (op == transfer_notification) {
         (int jetton_amount, slice from_user) = (in_msg_body~load_coins(), in_msg_body~load_msg_addr());
+
+        ;; sender must be USDT jetton wallet of this contract
+        throw_unless(error::unauthorized_transfer, equal_slice_bits(ctx_bridge_token_address, sender_address));
+
         cell ref_cs = in_msg_body~load_ref();
-
         slice ref_ds = ref_cs.begin_parse();
-
         int action_op = ref_ds~load_uint(32);
 
         if (action_op == op::bridge) {
-            ;; cell event_body = ref_ds~load_ref();
-            ;; int oid = ref_ds~load_uint(256);
-            ;; int amountIn = ref_ds~load_uint(32);
-            ;; int toChainId = ref_ds~load_uint(32);
-
-            int orderId = ref_ds~load_uint(64);
             slice sender = ref_ds~load_msg_addr();
             slice fromAssetAddr = ref_ds~load_msg_addr();
-            int amountIn = ref_ds~load_uint(32);
-            int toChainId = ref_ds~load_uint(32);
+            int amountIn = ref_ds~load_uint(64);
+            int toChainId = ref_ds~load_uint(64);
             int receiver = ref_ds~load_uint(160);
             int tokenOutAddress = ref_ds~load_uint(160);
 
-            ctx_counter += orderId;
             ctx_id += toChainId;
-
-            save_data();
+            ctx_order_id += 1;
 
             builder from_ref = begin_cell()
+                .store_uint(TON_CHAIN_ID, 64)
                 .store_slice(sender)
                 .store_slice(fromAssetAddr)
-                .store_uint(amountIn, 32);
+                .store_uint(amountIn, 64);
             builder to_ref = begin_cell()
-                .store_uint(toChainId, 32)
+                .store_uint(toChainId, 64)
                 .store_uint(receiver, 160)
                 .store_uint(tokenOutAddress, 160);
 
-            emit_log_simple(LOG_SWAP,
+            emit_log_simple(LOG_BRIDGE_OUT,
                 begin_cell()
-                    .store_uint(orderId, 64)
+                    .store_uint(ctx_order_id, 64)
                     .store_ref(from_ref.end_cell())
                     .store_ref(to_ref.end_cell())
                     .store_uint(jetton_amount, 32)
                     .end_cell(), 0);
 
+            save_data();
+
             return ();
         }
+        throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
     }
 
-    if (op == op::withdraw) {
+    if (op == op::withdrawer::withdraw_ton) {
+        throw_unless(error::unauthorized_withdraw, equal_slice_bits(ctx_withdrawer, sender_address));
+
         raw_reserve(10000000, 2);
-        builder msg = create_msg(msg_flag::bounceable, sender_address, 0);
+        builder msg = create_msg(msg_flag::bounceable, ctx_withdrawer, 0);
         send_raw_message(msg.end_cell(), 128);
         return ();
     }
 
-    if (op == op::admin::swap) {
+    if (op == op::withdrawer::withdraw_jetton) {
+        throw_unless(error::unauthorized_withdraw, equal_slice_bits(ctx_withdrawer, sender_address));
+
+        slice child_wallet =  in_msg_body~load_msg_addr();
+        int amount =  in_msg_body~load_coins();
+        cell custom_payload = in_msg_body~load_maybe_ref();
+
+        var msg = begin_cell()
+            .store_uint(msg_flag::bounceable, 6)
+            .store_slice(child_wallet)
+            .store_coins(0)
+            .store_msgbody_prefix_ref(
+                begin_cell()
+                    .store_op(op::transfer)
+                    .store_query_id(query_id)
+                    .store_coins(amount)
+                    .store_slice(ctx_withdrawer)
+                    .store_slice(ctx_withdrawer)
+                    .store_maybe_ref(custom_payload)
+                    .store_coins(0)
+                    .store_int(false, 1)
+                    .end_cell()
+            );
+        return send_raw_message(msg.end_cell(), 64);
+    }
+
+    if (op == op::bridger::bridge_in) {
+        throw_unless(error::unauthorized_bridge_in, equal_slice_bits(ctx_bridger, sender_address));
+
         int orderId = in_msg_body~load_uint(64);
         cell body = in_msg_body~load_ref();
 
         send_raw_message(body, 0);
 
-        emit_log_simple(LOG_SWAP, begin_cell().store_uint(orderId, 64).end_cell(), 0);
+        emit_log_simple(LOG_BRIDGE_IN, begin_cell().store_uint(orderId, 64).end_cell(), 0);
 
         return ();
     }
 
-    if (op == op::swap) {
-        cell body = in_msg_body~load_ref();
+    if (op == op::admin::update_address) {
+        throw_unless(error::unauthorized_update_address, equal_slice_bits(ctx_owner, sender_address));
+        slice load_withdrawer = in_msg_body~load_msg_addr();
+        slice load_bridger = in_msg_body~load_msg_addr();
+        slice load_bridge_token_address = in_msg_body~load_msg_addr();
 
-        int trade_value = my_balance - MIN_BALANCE;
-        if (trade_value < MIN_TRADE_AMOUNT + TRADE_FEE) {
-            throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
-        }
+        ctx_withdrawer = load_withdrawer;
+        ctx_bridger = load_bridger;
+        ctx_bridge_token_address = load_bridge_token_address;
 
-        send_raw_message(body, 0);
+        save_data();
 
-        emit_log_simple(LOG_SWAP, begin_cell().store_slice(sender_address).store_uint(trade_value, 32).end_cell(), 0);
+        return();
+    }
 
-        return ();
+    if (op == op::admin::update_owner) {
+        throw_unless(error::unauthorized_update_address, equal_slice_bits(ctx_owner, sender_address));
+        slice load_owner = in_msg_body~load_msg_addr();
+
+        ctx_owner = load_owner;
+
+        save_data();
+
+        return();
     }
 
     throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
@@ -159,5 +204,25 @@ int get_counter() method_id {
 int get_id() method_id {
     load_data();
     return ctx_id;
+}
+
+slice get_bridge_token_address() method_id {
+    load_data();
+    return ctx_bridge_token_address;
+}
+
+slice get_withdrawer() method_id {
+    load_data();
+    return ctx_withdrawer;
+}
+
+slice get_owner() method_id {
+    load_data();
+    return ctx_owner;
+}
+
+slice get_bridger() method_id {
+    load_data();
+    return ctx_bridger;
 }
 

@@ -1,5 +1,15 @@
 #include "stdlib.fc";
 
+builder store_msgbody_prefix_slice(builder b) inline {
+    return b.store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
+}
+builder store_msgbody_prefix_ref(builder b, cell ref) inline {
+    return b.store_uint(1, 1 + 4 + 4 + 64 + 32 + 1 + 1).store_ref(ref);
+}
+
+builder store_op(builder b, int op) inline { return b.store_uint(op, 32); }
+builder store_query_id(builder b, int query_id) inline { return b.store_uint(query_id, 64); }
+
 builder create_msg(int flags, slice to_address, int value) inline {
     return begin_cell()
         .store_uint(flags, 6)

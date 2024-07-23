@@ -1,11 +1,9 @@
 #include "imports/stdlib.fc";
 #include "imports/common.fc";
 #include "imports/params.func";
+#include "imports/error-codes.fc";
 
 const op::increase = "op::increase"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
-const op::withdraw = "op::withdraw"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
-const op::swap = "op::swap"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
-const int transfer_notification = 0x7362d09c;
 
 ;; storage variables
 
@@ -13,6 +11,7 @@ const int transfer_notification = 0x7362d09c;
 ;; since addresses in TON depend on the initial state of the contract
 global int ctx_id;
 global int ctx_counter;
+global slice owner;
 
 ;; load_data populates storage variables using stored data
 () load_data() impure {
@@ -20,6 +19,7 @@ global int ctx_counter;
 
     ctx_id = ds~load_uint(32);
     ctx_counter = ds~load_uint(32);
+    owner = ds~load_msg_addr();
 
     ds.end_parse();
 }
@@ -30,16 +30,10 @@ global int ctx_counter;
         begin_cell()
             .store_uint(ctx_id, 32)
             .store_uint(ctx_counter, 32)
+            .store_slice(owner)
             .end_cell()
     );
 }
-
-const int MIN_BALANCE = 0; ;; 0.1 TON
-const int MIN_TRADE_AMOUNT = 0; ;; 1 TON
-const int TRADE_FEE = 2000000; ;; 0.2 TON
-const int msg_flag::bounceable = 0x18;
-const int ton_vault::swap = 0xea06185d;
-slice addr_none() asm "b{00} PUSHSLICE";
 
 ;; recv_internal is the main function of the contract and is called when it receives a message from other contracts
 () recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
@@ -60,14 +54,12 @@ slice addr_none() asm "b{00} PUSHSLICE";
     int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
     int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
 
-    if (op == transfer_notification) {
-        cell body = in_msg_body~load_uint(32);
-
-        emit_log_simple(LOG_SWAP, begin_cell().store_slice(sender_address).store_uint(body, 32).end_cell(), 0);
-
-        ctx_counter += body;
-
+    if (op == op::increase) {
+        throw_unless(error::unauthorized_transfer, equal_slice_bits(owner, sender_address));
+        int increase_by = in_msg_body~load_uint(32);
+        ctx_counter += increase_by;
         save_data();
+        emit_log_simple(LOG_SWAP, begin_cell().store_uint(100, 32).store_uint(10000, 32).store_coins(100000).end_cell(), 1);
         return ();
     }
 
@@ -86,4 +78,9 @@ int get_counter() method_id {
 int get_id() method_id {
     load_data();
     return ctx_id;
+}
+
+slice get_owner() method_id {
+    load_data();
+    return owner;
 }

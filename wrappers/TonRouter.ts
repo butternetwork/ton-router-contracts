@@ -1,18 +1,40 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
 
+//global slice owner;
+// global slice withdrawer;
+// global slice bridger;
+// global slice bridge_token_address;
 export type TonRouterConfig = {
     id: number;
     counter: number;
+    order_id: number;
+    owner: Address;
+    withdrawer: Address;
+    bridger: Address;
+    bridge_token_address: Address;
 };
 
 export function tonRouterConfigToCell(config: TonRouterConfig): Cell {
-    return beginCell().storeUint(config.id, 32).storeUint(config.counter, 32).endCell();
+    return beginCell()
+        .storeUint(config.id, 32)
+        .storeUint(config.counter, 32)
+        .storeUint(config.order_id, 64)
+        .storeAddress(config.owner)
+        .storeRef(
+            beginCell()
+                .storeAddress(config.withdrawer)
+                .storeAddress(config.bridge_token_address)
+                .storeAddress(config.bridger)
+                .endCell(),
+        )
+        .endCell();
 }
 
 export const Opcodes = {
     increase: 0x7e8764ef,
     withdraw: 0xcb03bfaf,
     swap: 0xca2663c4,
+    updateAddress: 0x26c64b3c,
 };
 
 export class TonRouter implements Contract {
@@ -73,6 +95,30 @@ export class TonRouter implements Contract {
             body: beginCell()
                 .storeUint(Opcodes.withdraw, 32)
                 .storeUint(opts.queryID ?? 0, 64)
+                .endCell(),
+        });
+    }
+
+    async sendUpdateAddress(
+        provider: ContractProvider,
+        via: Sender,
+        opts: {
+            value: bigint;
+            queryID?: number;
+            withdrawer: Address;
+            bridger: Address;
+            bridge_token_address: Address;
+        },
+    ) {
+        await provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(Opcodes.updateAddress, 32)
+                .storeUint(opts.queryID ?? 0, 64)
+                .storeAddress(opts.withdrawer)
+                .storeAddress(opts.bridger)
+                .storeAddress(opts.bridge_token_address)
                 .endCell(),
         });
     }
