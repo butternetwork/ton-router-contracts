@@ -7,12 +7,23 @@
 
 ;; id is required to be able to create different instances of counters
 ;; since addresses in TON depend on the initial state of the contract
+const int ctx_chain_pool_id = 70;
 global int ctx_id;
 global int ctx_counter;
+
+;; Order ID, used to track bridge operations (ton -> other chain)
 global int ctx_order_id;
+
+;; Contract owner address
 global slice ctx_owner;
+
+;; Authorized address for withdrawal operations
 global slice ctx_withdrawer;
+
+;; Authorized address for bridge in operations (other chain -> ton)
 global slice ctx_bridger;
+
+;; Bridge token address, usdt jetton wallet address of this contract
 global slice ctx_bridge_token_address;
 
 ;; load_data populates storage variables using stored data
@@ -63,12 +74,12 @@ global slice ctx_bridge_token_address;
     }
 
     slice sender_address = cs~load_msg_addr();
-
     load_data(); ;; here we populate the storage variables
-
     int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
     int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
 
+    ;; Op: transfer_notification
+    ;; This operation is called when the contract receives a notification about a token transfer
     if (op == transfer_notification) {
         (int jetton_amount, slice from_user) = (in_msg_body~load_coins(), in_msg_body~load_msg_addr());
 
@@ -79,6 +90,8 @@ global slice ctx_bridge_token_address;
         slice ref_ds = ref_cs.begin_parse();
         int action_op = ref_ds~load_uint(32);
 
+        ;; Op: op::bridge
+        ;; This sub-operation initiates a bridge operation from this chain to another chain
         if (action_op == op::bridge) {
             slice sender = ref_ds~load_msg_addr();
             slice fromAssetAddr = ref_ds~load_msg_addr();
@@ -87,8 +100,10 @@ global slice ctx_bridge_token_address;
             int receiver = ref_ds~load_uint(160);
             int tokenOutAddress = ref_ds~load_uint(160);
 
-            ctx_id += toChainId;
+            ;; Increment order ID
             ctx_order_id += 1;
+
+            int full_order_id = (ctx_chain_pool_id << 56) | (ctx_order_id & 0x00FFFFFFFFFFFFFF);
 
             builder from_ref = begin_cell()
                 .store_uint(TON_CHAIN_ID, 64)
@@ -102,7 +117,7 @@ global slice ctx_bridge_token_address;
 
             emit_log_simple(LOG_BRIDGE_OUT,
                 begin_cell()
-                    .store_uint(ctx_order_id, 64)
+                    .store_uint(full_order_id, 64)
                     .store_ref(from_ref.end_cell())
                     .store_ref(to_ref.end_cell())
                     .store_uint(jetton_amount, 32)
@@ -115,6 +130,8 @@ global slice ctx_bridge_token_address;
         throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
     }
 
+    ;; Op: op::withdrawer::withdraw_ton
+    ;; This operation allows the authorized withdrawer to withdraw native TON coins
     if (op == op::withdrawer::withdraw_ton) {
         throw_unless(error::unauthorized_withdraw, equal_slice_bits(ctx_withdrawer, sender_address));
 
@@ -124,6 +141,8 @@ global slice ctx_bridge_token_address;
         return ();
     }
 
+    ;; Op: op::withdrawer::withdraw_jetton
+    ;; This operation allows the authorized withdrawer to withdraw Jetton tokens
     if (op == op::withdrawer::withdraw_jetton) {
         throw_unless(error::unauthorized_withdraw, equal_slice_bits(ctx_withdrawer, sender_address));
 
@@ -150,6 +169,8 @@ global slice ctx_bridge_token_address;
         return send_raw_message(msg.end_cell(), 64);
     }
 
+    ;; Op: op::bridger::bridge_in
+    ;; This operation is called to process an incoming bridge operation from another chain
     if (op == op::bridger::bridge_in) {
         throw_unless(error::unauthorized_bridge_in, equal_slice_bits(ctx_bridger, sender_address));
 
@@ -163,6 +184,8 @@ global slice ctx_bridge_token_address;
         return ();
     }
 
+    ;; Op: op::admin::update_address
+    ;; This admin operation allows updating of authorized addresses for various roles
     if (op == op::admin::update_address) {
         throw_unless(error::unauthorized_update_address, equal_slice_bits(ctx_owner, sender_address));
         slice load_withdrawer = in_msg_body~load_msg_addr();
@@ -178,6 +201,8 @@ global slice ctx_bridge_token_address;
         return();
     }
 
+    ;; Op: op::admin::update_owner
+    ;; This admin operation allows transferring ownership of the contract to a new address
     if (op == op::admin::update_owner) {
         throw_unless(error::unauthorized_update_address, equal_slice_bits(ctx_owner, sender_address));
         slice load_owner = in_msg_body~load_msg_addr();
