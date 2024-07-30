@@ -4,7 +4,7 @@ import { NetworkProvider, sleep } from '@ton/blueprint';
 
 const BRIDGER = 'UQAiqP-qy6O3Fbe8aGNTMz_aubZDMBqTqE0Nwf7qfyj1nB9c';
 const WITHDRAWER = 'EQBOrNji7_U-kafCZ8O4jopGaeCItRyYxWiqmbdvPx1sT1I-';
-const BRIDGE_TOKEN_ADDRESS = 'EQCtRfuEquThU2JNL-uov2GzUAt1SsIECtQqm1t1CkJT40Xr';
+const BRIDGE_TOKEN_ADDRESS = 'EQD44EzIhC_eEOOSGnrORLn71pbUbW-sds4zuPk7Icr-REUJ';
 
 export async function run(provider: NetworkProvider, args: string[]) {
     const ui = provider.ui();

@@ -8,8 +8,6 @@
 ;; id is required to be able to create different instances of counters
 ;; since addresses in TON depend on the initial state of the contract
 const int ctx_chain_pool_id = 70;
-global int ctx_id;
-global int ctx_counter;
 
 ;; Order ID, used to track bridge operations (ton -> other chain)
 global int ctx_order_id;
@@ -30,8 +28,6 @@ global slice ctx_bridge_token_address;
 () load_data() impure {
     var ds = get_data().begin_parse();
 
-    ctx_id = ds~load_uint(32);
-    ctx_counter = ds~load_uint(32);
     ctx_order_id = ds~load_uint(64);
     ctx_owner = ds~load_msg_addr();
 
@@ -47,8 +43,6 @@ global slice ctx_bridge_token_address;
 () save_data() impure {
     set_data(
         begin_cell()
-            .store_uint(ctx_id, 32)
-            .store_uint(ctx_counter, 32)
             .store_uint(ctx_order_id, 64)
             .store_slice(ctx_owner)
             .store_ref(begin_cell()
@@ -96,6 +90,7 @@ global slice ctx_bridge_token_address;
             slice sender = ref_ds~load_msg_addr();
             slice fromAssetAddr = ref_ds~load_msg_addr();
             int amountIn = ref_ds~load_uint(64);
+            int slippage = ref_ds~load_uint(16);
             int toChainId = ref_ds~load_uint(64);
             int receiver = ref_ds~load_uint(160);
             int tokenOutAddress = ref_ds~load_uint(160);
@@ -109,7 +104,8 @@ global slice ctx_bridge_token_address;
                 .store_uint(TON_CHAIN_ID, 64)
                 .store_slice(sender)
                 .store_slice(fromAssetAddr)
-                .store_uint(amountIn, 64);
+                .store_uint(amountIn, 64)
+                .store_uint(slippage, 16);
             builder to_ref = begin_cell()
                 .store_uint(toChainId, 64)
                 .store_uint(receiver, 160)
@@ -220,16 +216,6 @@ global slice ctx_bridge_token_address;
 ;; get methods are a means to conveniently read contract data using, for example, HTTP APIs
 ;; they are marked with method_id
 ;; note that unlike in many other smart contract VMs, get methods cannot be called by other contracts
-
-int get_counter() method_id {
-    load_data();
-    return ctx_counter;
-}
-
-int get_id() method_id {
-    load_data();
-    return ctx_id;
-}
 
 slice get_bridge_token_address() method_id {
     load_data();
