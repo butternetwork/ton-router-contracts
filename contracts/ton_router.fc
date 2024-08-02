@@ -35,6 +35,7 @@ global slice ctx_bridge_token_address;
     ctx_withdrawer = addresses_slice~load_msg_addr();
     ctx_bridger = addresses_slice~load_msg_addr();
     ctx_bridge_token_address = addresses_slice~load_msg_addr();
+    addresses_slice.end_parse();
 
     ds.end_parse();
 }
