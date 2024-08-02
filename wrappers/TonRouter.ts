@@ -33,6 +33,7 @@ export function tonRouterConfigToCell(config: TonRouterConfig): Cell {
 export const Opcodes = {
     increase: 0x7e8764ef,
     withdraw: 0xcb03bfaf,
+    withdrawJetton: 0x24edca2a,
     swap: 0xca2663c4,
     updateAddress: 0x26c64b3c,
 };
@@ -95,6 +96,29 @@ export class TonRouter implements Contract {
             body: beginCell()
                 .storeUint(Opcodes.withdraw, 32)
                 .storeUint(opts.queryID ?? 0, 64)
+                .endCell(),
+        });
+    }
+
+    async sendWithdrawJetton(
+        provider: ContractProvider,
+        via: Sender,
+        opts: {
+            value: bigint;
+            jettonWallet: Address;
+            amount: bigint;
+            queryID?: number;
+        },
+    ) {
+        await provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(Opcodes.withdrawJetton, 32)
+                .storeUint(opts.queryID ?? 0, 64)
+                .storeAddress(opts.jettonWallet)
+                .storeCoins(opts.amount)
+                .storeMaybeRef(null)
                 .endCell(),
         });
     }
