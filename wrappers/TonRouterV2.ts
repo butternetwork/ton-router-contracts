@@ -1,30 +1,29 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
 
-export type LoggerConfig = {
+export type TonRouterV2Config = {
     id: number;
     counter: number;
-    owner: Address
 };
 
-export function loggerConfigToCell(config: LoggerConfig): Cell {
-    return beginCell().storeUint(config.id, 32).storeUint(config.counter, 32).storeAddress(config.owner).endCell();
+export function tonRouterV2ConfigToCell(config: TonRouterV2Config): Cell {
+    return beginCell().storeUint(config.id, 32).storeUint(config.counter, 32).endCell();
 }
 
 export const Opcodes = {
     increase: 0x7e8764ef,
 };
 
-export class Logger implements Contract {
+export class TonRouterV2 implements Contract {
     constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell }) {}
 
     static createFromAddress(address: Address) {
-        return new Logger(address);
+        return new TonRouterV2(address);
     }
 
-    static createFromConfig(config: LoggerConfig, code: Cell, workchain = 0) {
-        const data = loggerConfigToCell(config);
+    static createFromConfig(config: TonRouterV2Config, code: Cell, workchain = 0) {
+        const data = tonRouterV2ConfigToCell(config);
         const init = { code, data };
-        return new Logger(contractAddress(workchain, init), init);
+        return new TonRouterV2(contractAddress(workchain, init), init);
     }
 
     async sendDeploy(provider: ContractProvider, via: Sender, value: bigint) {

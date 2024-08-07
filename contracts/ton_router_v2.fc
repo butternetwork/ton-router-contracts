@@ -73,21 +73,63 @@ global slice ctx_bridge_token_address;
     int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
     int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
 
+    ;; Op: op::bridge_out
+    if (op == op::bridge_out_ton) {
+        throw_unless(error::bridge_out_ton_not_enough, msg_value >= min_ton_bridge_out_amount); ;; 0.1 TON
+
+        raw_reserve(10000000, 2);
+
+        cell body = in_msg_body~load_ref();
+
+        send_raw_message(body, 0);
+
+        return ();
+    }
+
     ;; Op: transfer_notification
     ;; This operation is called when the contract receives a notification about a token transfer
     if (op == transfer_notification) {
         (int jetton_amount, slice from_user) = (in_msg_body~load_coins(), in_msg_body~load_msg_addr());
 
-        ;; sender must be USDT jetton wallet of this contract
-        throw_unless(error::unauthorized_transfer, equal_slice_bits(ctx_bridge_token_address, sender_address));
-
         cell ref_cs = in_msg_body~load_ref();
         slice ref_ds = ref_cs.begin_parse();
         int action_op = ref_ds~load_uint(32);
 
+        if (action_op == op::bridge_out_jetton) {
+            int final_jetton_amount = muldiv(jetton_amount, 99, 100);
+            slice from_vault_address = ref_ds~load_msg_addr();
+            cell swap_payload = ref_ds~load_ref();
+
+            cell swapBody = begin_cell()
+                .store_uint(op::transfer, 32)
+                .store_uint(0, 64)
+                .store_coins(final_jetton_amount)
+                .store_slice(from_vault_address)
+                .store_slice(ctx_owner)
+                .store_maybe_ref(null())
+                .store_coins(100000000)
+                .store_maybe_ref(swap_payload)
+                .end_cell();
+
+            cell payload = begin_cell()
+                .store_uint(msg_flag::bounceable, 6)
+                .store_slice(sender_address)
+                .store_coins(150000000)
+                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1)
+                .store_maybe_ref(swapBody)
+                .end_cell();
+
+            send_raw_message(payload, 64);
+
+            return ();
+        }
+
         ;; Op: op::bridge
         ;; This sub-operation initiates a bridge operation from this chain to another chain
         if (action_op == op::bridge) {
+            ;; sender must be USDT jetton wallet of this contract
+            throw_unless(error::unauthorized_transfer, equal_slice_bits(ctx_bridge_token_address, sender_address));
+
             (cell from_ref, cell to_ref) = (ref_ds~load_ref(), ref_ds~load_ref());
             (slice from_ds, slice to_ds) = (from_ref.begin_parse(), to_ref.begin_parse());
 

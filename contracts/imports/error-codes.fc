@@ -1,5 +1,6 @@
 const int error::unknown_op = 0xffff;
 const int error::wrong_workchain = 333;
+const int error::invalid_data = 600;
 
 
 const int error::unauthorized_withdraw = 702;
@@ -7,6 +8,7 @@ const int error::unauthorized_bridge_in = 703;
 const int error::unauthorized_update_address = 704;
 const int error::unauthorized_transfer = 705;
 
+const int error::bridge_out_ton_not_enough = 801;
 const int error::not_enough_jettons = 706;
 const int error::unauthorized_incoming_transfer = 707;
 const int error::malformed_forward_payload = 708;

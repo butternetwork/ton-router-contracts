@@ -16,8 +16,6 @@ export type TonRouterConfig = {
 
 export function tonRouterConfigToCell(config: TonRouterConfig): Cell {
     return beginCell()
-        .storeUint(config.id, 32)
-        .storeUint(config.counter, 32)
         .storeUint(config.order_id, 64)
         .storeAddress(config.owner)
         .storeRef(

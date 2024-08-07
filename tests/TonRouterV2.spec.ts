@@ -1,25 +1,25 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { Cell, toNano } from '@ton/core';
-import { Logger } from '../wrappers/Logger';
+import { TonRouterV2 } from '../wrappers/TonRouterV2';
 import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
 
-describe('Logger', () => {
+describe('TonRouterV2', () => {
     let code: Cell;
 
     beforeAll(async () => {
-        code = await compile('Logger');
+        code = await compile('TonRouterV2');
     });
 
     let blockchain: Blockchain;
     let deployer: SandboxContract<TreasuryContract>;
-    let logger: SandboxContract<Logger>;
+    let tonRouterV2: SandboxContract<TonRouterV2>;
 
     beforeEach(async () => {
         blockchain = await Blockchain.create();
 
-        logger = blockchain.openContract(
-            Logger.createFromConfig(
+        tonRouterV2 = blockchain.openContract(
+            TonRouterV2.createFromConfig(
                 {
                     id: 0,
                     counter: 0,
@@ -30,11 +30,11 @@ describe('Logger', () => {
 
         deployer = await blockchain.treasury('deployer');
 
-        const deployResult = await logger.sendDeploy(deployer.getSender(), toNano('0.05'));
+        const deployResult = await tonRouterV2.sendDeploy(deployer.getSender(), toNano('0.05'));
 
         expect(deployResult.transactions).toHaveTransaction({
             from: deployer.address,
-            to: logger.address,
+            to: tonRouterV2.address,
             deploy: true,
             success: true,
         });
@@ -42,7 +42,7 @@ describe('Logger', () => {
 
     it('should deploy', async () => {
         // the check is done inside beforeEach
-        // blockchain and logger are ready to use
+        // blockchain and tonRouterV2 are ready to use
     });
 
     it('should increase counter', async () => {
@@ -52,7 +52,7 @@ describe('Logger', () => {
 
             const increaser = await blockchain.treasury('increaser' + i);
 
-            const counterBefore = await logger.getCounter();
+            const counterBefore = await tonRouterV2.getCounter();
 
             console.log('counter before increasing', counterBefore);
 
@@ -60,18 +60,18 @@ describe('Logger', () => {
 
             console.log('increasing by', increaseBy);
 
-            const increaseResult = await logger.sendIncrease(increaser.getSender(), {
+            const increaseResult = await tonRouterV2.sendIncrease(increaser.getSender(), {
                 increaseBy,
                 value: toNano('0.05'),
             });
 
             expect(increaseResult.transactions).toHaveTransaction({
                 from: increaser.address,
-                to: logger.address,
+                to: tonRouterV2.address,
                 success: true,
             });
 
-            const counterAfter = await logger.getCounter();
+            const counterAfter = await tonRouterV2.getCounter();
 
             console.log('counter after increasing', counterAfter);
 

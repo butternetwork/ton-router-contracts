@@ -29,8 +29,4 @@ export async function run(provider: NetworkProvider) {
     await tonRouter.sendDeploy(provider.sender(), toNano('0.045'));
 
     await provider.waitForDeploy(tonRouter.address, 200);
-
-    console.log(await tonRouter.getCounter());
-
-    console.log('ID', await tonRouter.getID());
 }
