@@ -5,13 +5,12 @@ const int LOG_SWAP = 0xc0470ccf;
 const int LOG_BRIDGE_OUT = 0x34a7e0e8;
 const int LOG_BRIDGE_IN = 0x1a6c0a51;
 
-const int op::bridge_out_ton = "op::bridge_out_ton"c;
-const int op::bridge_out_jetton = "op::bridge_out_jetton"c;
+const int op::swap_from_ton = "op::swap_from_ton"c;
+const int op::swap_from_jetton = "op::swap_from_jetton"c;
+const int op::swap_callback = "op::swap_callback"c;
+const int op::bridge_out = "op::bridge"c; ;; f361efcb
 const int op::transfer = 0xf8a7ea5;
-const op::increase = "op::increase"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
-const op::swap = "op::swap"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
-const int transfer_notification = 0x7362d09c;
-const op::bridge = "op::bridge"c; ;; f361efcb
+const int op::transfer_notification = 0x7362d09c;
 
 ;; Admin function params
 const op::admin::update_owner = "op::admin::update_owner"c; ;; f361efcb
@@ -21,3 +20,6 @@ const op::withdrawer::withdraw_jetton = "op::withdrawer::withdraw_jetton"c; ;; c
 const op::bridger::bridge_in = "op::bridger::bridge_in"c; ;; f361efcb
 
 const int min_ton_bridge_out_amount = 100000000;
+
+const slice USDT_MASTER_ADDRESS = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs";
+const slice JETTON_WALLET_CODE = "b5ee9c72010101010023000842028f452d7a4dfd74066b682365177259ed05734435be76b5fd4bd5d8af2b7c3d68";

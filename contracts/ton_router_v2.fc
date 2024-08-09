@@ -3,57 +3,38 @@
 #include "imports/params.func";
 #include "imports/error-codes.fc";
 
+#include "data.func";
+#include "bridge.func";
+#include "swap.func";
+#include "admin.func";
+#include "utils.func";
+
 ;; storage variables
 
 ;; id is required to be able to create different instances of counters
 ;; since addresses in TON depend on the initial state of the contract
 const int ctx_chain_pool_id = 70;
 
-;; Order ID, used to track bridge operations (ton -> other chain)
-global int ctx_order_id;
+;; This operation is called when the contract receives a notification about a token transfer
+() handle_transfer_notification(slice sender_address, slice in_msg_body) impure {
+    (int jetton_amount, slice from_user) = (in_msg_body~load_coins(), in_msg_body~load_msg_addr());
 
-;; Contract owner address
-global slice ctx_owner;
+    cell ref_cs = in_msg_body~load_ref();
+    slice ref_ds = ref_cs.begin_parse();
+    int action_op = ref_ds~load_uint(32);
 
-;; Authorized address for withdrawal operations
-global slice ctx_withdrawer;
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
 
-;; Authorized address for bridge in operations (other chain -> ton)
-global slice ctx_bridger;
-
-;; Bridge token address, usdt jetton wallet address of this contract
-global slice ctx_bridge_token_address;
-
-;; load_data populates storage variables using stored data
-() load_data() impure {
-    var ds = get_data().begin_parse();
-
-    ctx_order_id = ds~load_uint(64);
-    ctx_owner = ds~load_msg_addr();
-
-    var addresses_slice = ds~load_ref().begin_parse();
-    ctx_withdrawer = addresses_slice~load_msg_addr();
-    ctx_bridger = addresses_slice~load_msg_addr();
-    ctx_bridge_token_address = addresses_slice~load_msg_addr();
-    addresses_slice.end_parse();
-
-    ds.end_parse();
-}
-
-;; save_data stores storage variables as a cell into persistent storage
-() save_data() impure {
-    set_data(
-        begin_cell()
-            .store_uint(ctx_order_id, 64)
-            .store_slice(ctx_owner)
-            .store_ref(begin_cell()
-                .store_slice(ctx_withdrawer)
-                .store_slice(ctx_bridger)
-                .store_slice(ctx_bridge_token_address)
-                .end_cell()
-            )
-            .end_cell()
-    );
+    if (action_op == op::swap_from_jetton) {
+        handle_swap_from_jetton(jetton_amount, ref_ds, sender_address);
+    } elseif (action_op == op::swap_callback) {
+        handle_swap_callback(ref_ds);
+    } elseif (action_op == op::bridge_out) {
+        slice bridge_token_address = calculate_user_jetton_wallet_address(my_address(), USDT_MASTER_ADDRESS);
+        handle_bridge_out(jetton_amount, bridge_token_address, ctx_chain_pool_id, order_id, ref_ds, sender_address);
+    } else {
+        throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
+    }
 }
 
 ;; recv_internal is the main function of the contract and is called when it receives a message from other contracts
@@ -73,194 +54,25 @@ global slice ctx_bridge_token_address;
     int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
     int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
 
-    ;; Op: op::bridge_out
-    if (op == op::bridge_out_ton) {
-        throw_unless(error::bridge_out_ton_not_enough, msg_value >= min_ton_bridge_out_amount); ;; 0.1 TON
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
 
-        raw_reserve(10000000, 2);
-
-        cell body = in_msg_body~load_ref();
-
-        send_raw_message(body, 0);
-
-        return ();
-    }
-
-    ;; Op: transfer_notification
-    ;; This operation is called when the contract receives a notification about a token transfer
-    if (op == transfer_notification) {
-        (int jetton_amount, slice from_user) = (in_msg_body~load_coins(), in_msg_body~load_msg_addr());
-
-        cell ref_cs = in_msg_body~load_ref();
-        slice ref_ds = ref_cs.begin_parse();
-        int action_op = ref_ds~load_uint(32);
-
-        if (action_op == op::bridge_out_jetton) {
-            int final_jetton_amount = muldiv(jetton_amount, 99, 100);
-            slice from_vault_address = ref_ds~load_msg_addr();
-            cell swap_payload = ref_ds~load_ref();
-
-            cell swapBody = begin_cell()
-                .store_uint(op::transfer, 32)
-                .store_uint(0, 64)
-                .store_coins(final_jetton_amount)
-                .store_slice(from_vault_address)
-                .store_slice(ctx_owner)
-                .store_maybe_ref(null())
-                .store_coins(100000000)
-                .store_maybe_ref(swap_payload)
-                .end_cell();
-
-            cell payload = begin_cell()
-                .store_uint(msg_flag::bounceable, 6)
-                .store_slice(sender_address)
-                .store_coins(150000000)
-                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1)
-                .store_maybe_ref(swapBody)
-                .end_cell();
-
-            send_raw_message(payload, 64);
-
-            return ();
-        }
-
-        ;; Op: op::bridge
-        ;; This sub-operation initiates a bridge operation from this chain to another chain
-        if (action_op == op::bridge) {
-            ;; sender must be USDT jetton wallet of this contract
-            throw_unless(error::unauthorized_transfer, equal_slice_bits(ctx_bridge_token_address, sender_address));
-
-            (cell from_ref, cell to_ref) = (ref_ds~load_ref(), ref_ds~load_ref());
-            (slice from_ds, slice to_ds) = (from_ref.begin_parse(), to_ref.begin_parse());
-
-            ;; Parse from data
-            slice sender = from_ds~load_msg_addr();
-            slice from_asset_addr = from_ds~load_msg_addr();
-            int amount_in = from_ds~load_uint(64);
-            int slippage = from_ds~load_uint(16);
-
-            ;; Parse to data
-            int to_chain_id = to_ds~load_uint(64);
-            int receiver = to_ds~load_uint(160);
-            int dest_token_out_address = to_ds~load_uint(160);
-
-            ;; Increment order ID
-            ctx_order_id += 1;
-
-            int full_order_id = (ctx_chain_pool_id << 56) | (ctx_order_id & 0x00FFFFFFFFFFFFFF);
-
-            builder from_ref = begin_cell()
-                .store_uint(TON_CHAIN_ID, 64)
-                .store_slice(sender)
-                .store_slice(from_asset_addr)
-                .store_uint(amount_in, 64)
-                .store_uint(slippage, 16);
-
-            builder to_ref = begin_cell()
-                .store_uint(to_chain_id, 64)
-                .store_uint(receiver, 160)
-                .store_uint(dest_token_out_address, 160);
-
-            emit_log_simple(LOG_BRIDGE_OUT,
-                begin_cell()
-                    .store_uint(full_order_id, 64)
-                    .store_ref(from_ref.end_cell())
-                    .store_ref(to_ref.end_cell())
-                    .store_uint(jetton_amount, 32)
-                    .end_cell(), 0);
-
-            save_data();
-
-            return ();
-        }
+    if (op == op::swap_from_ton) {
+        handle_swap_from_ton(msg_value, in_msg_body);
+    } elseif (op == op::withdrawer::withdraw_ton) {
+        handle_withdraw_ton(withdrawer, sender_address);
+    } elseif (op == op::withdrawer::withdraw_jetton) {
+        handle_withdraw_jetton(withdrawer, sender_address, query_id, in_msg_body);
+    } elseif (op == op::bridger::bridge_in) {
+        handle_bridge_in(sender_address, bridger, in_msg_body);
+    } elseif (op == op::admin::update_address) {
+        handle_update_address(sender_address, in_msg_body);
+    } elseif (op == op::admin::update_owner) {
+        handle_update_owner(sender_address, in_msg_body);
+    } elseif (op == op::transfer_notification) {
+        handle_transfer_notification(sender_address, in_msg_body);
+    } else {
         throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
     }
-
-    ;; Op: op::withdrawer::withdraw_ton
-    ;; This operation allows the authorized withdrawer to withdraw native TON coins
-    if (op == op::withdrawer::withdraw_ton) {
-        throw_unless(error::unauthorized_withdraw, equal_slice_bits(ctx_withdrawer, sender_address));
-
-        raw_reserve(10000000, 2);
-        builder msg = create_msg(msg_flag::bounceable, ctx_withdrawer, 0);
-        send_raw_message(msg.end_cell(), 128);
-        return ();
-    }
-
-    ;; Op: op::withdrawer::withdraw_jetton
-    ;; This operation allows the authorized withdrawer to withdraw Jetton tokens
-    if (op == op::withdrawer::withdraw_jetton) {
-        throw_unless(error::unauthorized_withdraw, equal_slice_bits(ctx_withdrawer, sender_address));
-
-        slice child_wallet =  in_msg_body~load_msg_addr();
-        int amount =  in_msg_body~load_coins();
-        cell custom_payload = in_msg_body~load_maybe_ref();
-
-        var msg = begin_cell()
-            .store_uint(msg_flag::bounceable, 6)
-            .store_slice(child_wallet)
-            .store_coins(0)
-            .store_msgbody_prefix_ref(
-                begin_cell()
-                    .store_op(op::transfer)
-                    .store_query_id(query_id)
-                    .store_coins(amount)
-                    .store_slice(ctx_withdrawer)
-                    .store_slice(ctx_withdrawer)
-                    .store_maybe_ref(custom_payload)
-                    .store_coins(0)
-                    .store_int(false, 1)
-                    .end_cell()
-            );
-        return send_raw_message(msg.end_cell(), 64);
-    }
-
-    ;; Op: op::bridger::bridge_in
-    ;; This operation is called to process an incoming bridge operation from another chain
-    if (op == op::bridger::bridge_in) {
-        throw_unless(error::unauthorized_bridge_in, equal_slice_bits(ctx_bridger, sender_address));
-
-        int orderId = in_msg_body~load_uint(64);
-        cell body = in_msg_body~load_ref();
-
-        send_raw_message(body, 0);
-
-        emit_log_simple(LOG_BRIDGE_IN, begin_cell().store_uint(orderId, 64).end_cell(), 0);
-
-        return ();
-    }
-
-    ;; Op: op::admin::update_address
-    ;; This admin operation allows updating of authorized addresses for various roles
-    if (op == op::admin::update_address) {
-        throw_unless(error::unauthorized_update_address, equal_slice_bits(ctx_owner, sender_address));
-        slice load_withdrawer = in_msg_body~load_msg_addr();
-        slice load_bridger = in_msg_body~load_msg_addr();
-        slice load_bridge_token_address = in_msg_body~load_msg_addr();
-
-        ctx_withdrawer = load_withdrawer;
-        ctx_bridger = load_bridger;
-        ctx_bridge_token_address = load_bridge_token_address;
-
-        save_data();
-
-        return();
-    }
-
-    ;; Op: op::admin::update_owner
-    ;; This admin operation allows transferring ownership of the contract to a new address
-    if (op == op::admin::update_owner) {
-        throw_unless(error::unauthorized_update_address, equal_slice_bits(ctx_owner, sender_address));
-        slice load_owner = in_msg_body~load_msg_addr();
-
-        ctx_owner = load_owner;
-
-        save_data();
-
-        return();
-    }
-
-    throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
 }
 
 ;; get methods are a means to conveniently read contract data using, for example, HTTP APIs
@@ -268,22 +80,21 @@ global slice ctx_bridge_token_address;
 ;; note that unlike in many other smart contract VMs, get methods cannot be called by other contracts
 
 slice get_bridge_token_address() method_id {
-    load_data();
-    return ctx_bridge_token_address;
+    return calculate_user_jetton_wallet_address(my_address(), USDT_MASTER_ADDRESS);
 }
 
 slice get_withdrawer() method_id {
-    load_data();
-    return ctx_withdrawer;
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
+    return withdrawer;
 }
 
 slice get_owner() method_id {
-    load_data();
-    return ctx_owner;
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
+    return owner;
 }
 
 slice get_bridger() method_id {
-    load_data();
-    return ctx_bridger;
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
+    return bridger;
 }
 

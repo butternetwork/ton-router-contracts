@@ -1,0 +1,61 @@
+#include "imports/stdlib.fc";
+#include "imports/params.func";
+#include "imports/error-codes.fc";
+#include "imports/common.fc";
+#include "data.func";
+
+;; This admin operation allows updating of authorized addresses for various roles
+() handle_update_address(slice sender_address, slice in_msg_body) impure  {
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
+    throw_unless(error::unauthorized_update_address, equal_slice_bits(owner, sender_address));
+    slice new_withdrawer = in_msg_body~load_msg_addr();
+    slice new_bridger = in_msg_body~load_msg_addr();
+
+    save_data(order_id, swap_id, owner, new_withdrawer, new_bridger, swap_data);
+}
+
+;; This admin operation allows transferring ownership of the contract to a new address
+() handle_update_owner(slice sender_address, slice in_msg_body) impure {
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
+    throw_unless(error::unauthorized_update_address, equal_slice_bits(owner, sender_address));
+    slice new_owner = in_msg_body~load_msg_addr();
+
+    save_data(order_id, swap_id, new_owner, withdrawer, bridger, swap_data);
+}
+
+;; This operation allows the authorized withdrawer to withdraw native TON coins
+() handle_withdraw_ton(slice withdrawer, slice sender_address) impure {
+    throw_unless(error::unauthorized_withdraw, equal_slice_bits(withdrawer, sender_address));
+
+    raw_reserve(10000000, 2);
+    builder msg = create_msg(msg_flag::bounceable, withdrawer, 0);
+    send_raw_message(msg.end_cell(), 128);
+}
+
+;; This operation allows the authorized withdrawer to withdraw Jetton tokens
+() handle_withdraw_jetton(slice withdrawer, slice sender_address, int query_id, slice in_msg_body) impure {
+    throw_unless(error::unauthorized_withdraw, equal_slice_bits(withdrawer, sender_address));
+
+    slice child_wallet =  in_msg_body~load_msg_addr();
+    int amount =  in_msg_body~load_coins();
+    cell custom_payload = in_msg_body~load_maybe_ref();
+
+    var msg = begin_cell()
+        .store_uint(msg_flag::bounceable, 6)
+        .store_slice(child_wallet)
+        .store_coins(0)
+        .store_msgbody_prefix_ref(
+            begin_cell()
+                .store_op(op::transfer)
+                .store_query_id(query_id)
+                .store_coins(amount)
+                .store_slice(withdrawer)
+                .store_slice(withdrawer)
+                .store_maybe_ref(custom_payload)
+                .store_coins(0)
+                .store_int(false, 1)
+                .end_cell()
+        );
+    send_raw_message(msg.end_cell(), 64);
+}
+

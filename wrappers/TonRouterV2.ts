@@ -1,12 +1,25 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
 
 export type TonRouterV2Config = {
-    id: number;
-    counter: number;
+    order_id: number;
+    owner: Address;
+    withdrawer: Address;
+    bridger: Address;
+    bridge_token_address: Address;
 };
 
 export function tonRouterV2ConfigToCell(config: TonRouterV2Config): Cell {
-    return beginCell().storeUint(config.id, 32).storeUint(config.counter, 32).endCell();
+    return beginCell()
+        .storeUint(config.order_id, 64)
+        .storeAddress(config.owner)
+        .storeRef(
+            beginCell()
+                .storeAddress(config.withdrawer)
+                .storeAddress(config.bridge_token_address)
+                .storeAddress(config.bridger)
+                .endCell(),
+        )
+        .endCell();
 }
 
 export const Opcodes = {
@@ -14,7 +27,10 @@ export const Opcodes = {
 };
 
 export class TonRouterV2 implements Contract {
-    constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell }) {}
+    constructor(
+        readonly address: Address,
+        readonly init?: { code: Cell; data: Cell },
+    ) {}
 
     static createFromAddress(address: Address) {
         return new TonRouterV2(address);
@@ -41,7 +57,7 @@ export class TonRouterV2 implements Contract {
             increaseBy: number;
             value: bigint;
             queryID?: number;
-        }
+        },
     ) {
         await provider.internal(via, {
             value: opts.value,

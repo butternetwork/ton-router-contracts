@@ -1,0 +1,76 @@
+#include "imports/stdlib.fc";
+#include "imports/params.func";
+#include "imports/error-codes.fc";
+#include "imports/common.fc";
+#include "data.func";
+#include "utils.func";
+
+(cell) handle_swap_from_jetton(int jetton_amount, slice ref_ds, slice sender_address) impure {
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
+
+    slice fee_collector = ref_ds~load_msg_addr();
+    int fee_rate = ref_ds~load_uint(16);
+    slice from_vault_address = ref_ds~load_msg_addr();
+    cell swap_payload = ref_ds~load_ref();
+
+    if (fee_rate > 10000) {
+        throw(0xff);
+    }
+
+    int new_swap_id = swap_id + 1;
+    int final_jetton_amount = muldiv(jetton_amount, fee_rate, 10000);
+
+    cell body = begin_cell()
+        .store_uint(op::transfer, 32)
+        .store_uint(0, 64)
+        .store_coins(final_jetton_amount)
+        .store_slice(from_vault_address)
+        .store_slice(owner)
+        .store_maybe_ref(null())
+        .store_coins(100000000)
+        .store_maybe_ref(swap_payload)
+        .end_cell();
+
+    cell msg = begin_cell()
+        .store_uint(msg_flag::bounceable, 6)
+        .store_slice(sender_address)
+        .store_coins(150000000)
+        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1)
+        .store_maybe_ref(body)
+        .end_cell();
+
+    cell swap_info = begin_cell()
+        .store_slice(fee_collector)
+        .store_slice(sender_address) ;; from jetton address
+        .store_coins(jetton_amount - final_jetton_amount) ;; fee amount
+        .end_cell();
+
+    swap_data~udict_set(256, new_swap_id, swap_info);
+
+    save_data(order_id, swap_id, owner, withdrawer, bridger, swap_data);
+
+    send_raw_message(msg, 64);
+}
+
+() handle_swap_from_ton(int msg_value, slice in_msg_body) impure {
+    throw_unless(error::bridge_out_ton_not_enough, msg_value >= min_ton_bridge_out_amount); ;; 0.1 TON
+
+    raw_reserve(muldiv(msg_value, 1, 100), 2);
+
+    cell body = in_msg_body~load_ref();
+
+    send_raw_message(body, 0);
+}
+
+() handle_swap_callback(slice ref_ds) impure {
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
+    int swap_id = ref_ds~load_uint(256);
+
+    (cell swap_data, int success) = swap_data.udict_get?(256, swap_id);
+    throw_unless(error::swap_not_found, success);
+    slice swap_cs = swap_data.begin_parse();
+    slice fee_collector = swap_cs~load_msg_addr();
+    int fee_rate = swap_cs~load_uint(16);
+
+    ;; send_tokens();
+}

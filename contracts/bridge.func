@@ -1,0 +1,69 @@
+#include "imports/stdlib.fc";
+#include "imports/params.func";
+#include "imports/error-codes.fc";
+#include "imports/common.fc";
+#include "data.func";
+
+;; This operation is called to process an incoming bridge operation from another chain
+() handle_bridge_in(slice sender_address, slice bridger, slice in_msg_body) impure {
+    throw_unless(error::unauthorized_bridge_in, equal_slice_bits(bridger, sender_address));
+
+    int orderId = in_msg_body~load_uint(64);
+    cell body = in_msg_body~load_ref();
+
+    send_raw_message(body, 0);
+
+    emit_log_simple(LOG_BRIDGE_IN, begin_cell().store_uint(orderId, 64).end_cell(), 0);
+}
+
+;; This sub-operation initiates a bridge operation from this chain to another chain
+(int) handle_bridge_out(int jetton_amount, slice bridge_token_address, int chain_pool_id, int order_id, slice ref_ds, slice sender_address) impure {
+    ;; sender must be USDT jetton wallet of this contract
+    throw_unless(error::unauthorized_transfer, equal_slice_bits(bridge_token_address, sender_address));
+
+    (cell from_ref, cell to_ref) = (ref_ds~load_ref(), ref_ds~load_ref());
+    (slice from_ds, slice to_ds) = (from_ref.begin_parse(), to_ref.begin_parse());
+
+    ;; Parse from data
+    slice sender = from_ds~load_msg_addr();
+    slice from_asset_addr = from_ds~load_msg_addr();
+    int amount_in = from_ds~load_uint(64);
+    int final_amount_in = muldiv(amount_in, 99, 100);
+    int slippage = from_ds~load_uint(16);
+
+    ;; Parse to data
+    int to_chain_id = to_ds~load_uint(64);
+    int receiver = to_ds~load_uint(160);
+    int dest_token_out_address = to_ds~load_uint(160);
+
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
+
+    ;; Increment order ID
+    int new_order_id = order_id + 1;
+
+    int full_order_id = (chain_pool_id << 56) | (new_order_id & 0x00FFFFFFFFFFFFFF);
+
+    builder from_ref = begin_cell()
+        .store_uint(TON_CHAIN_ID, 64)
+        .store_slice(sender)
+        .store_slice(from_asset_addr)
+        .store_uint(final_amount_in, 64)
+        .store_uint(slippage, 16);
+
+    builder to_ref = begin_cell()
+        .store_uint(to_chain_id, 64)
+        .store_uint(receiver, 384)
+        .store_uint(dest_token_out_address, 384);
+
+    emit_log_simple(LOG_BRIDGE_OUT,
+        begin_cell()
+            .store_uint(full_order_id, 64)
+            .store_ref(from_ref.end_cell())
+            .store_ref(to_ref.end_cell())
+            .store_uint(jetton_amount, 32)
+            .end_cell(), 0);
+
+    save_data(new_order_id, swap_id, owner, withdrawer, bridger, swap_data);
+
+    return new_order_id;
+}

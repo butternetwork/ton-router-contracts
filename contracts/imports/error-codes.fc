@@ -22,3 +22,5 @@ const int error::unauthorized_mint_request = 73;
 const int error::unauthorized_burn_request = 74;
 const int error::unauthorized_change_admin_request = 76;
 const int error::unauthorized_change_content_request = 77;
+
+const int error::swap_not_found = 800;
