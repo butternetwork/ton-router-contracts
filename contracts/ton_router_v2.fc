@@ -28,7 +28,7 @@ const int ctx_chain_pool_id = 70;
     if (action_op == op::swap_from_jetton) {
         handle_swap_from_jetton(jetton_amount, ref_ds, sender_address);
     } elseif (action_op == op::swap_callback) {
-        handle_swap_callback(ref_ds);
+        handle_swap_callback(jetton_amount, sender_address, ref_ds);
     } elseif (action_op == op::bridge_out) {
         slice bridge_token_address = calculate_user_jetton_wallet_address(my_address(), USDT_MASTER_ADDRESS);
         handle_bridge_out(jetton_amount, bridge_token_address, ctx_chain_pool_id, order_id, ref_ds, sender_address);

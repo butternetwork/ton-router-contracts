@@ -62,7 +62,7 @@
     send_raw_message(body, 0);
 }
 
-() handle_swap_callback(slice ref_ds) impure {
+() handle_swap_callback(int jetton_amount, slice to_jetton_wallet, slice ref_ds) impure {
     (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
     int swap_id = ref_ds~load_uint(256);
 
@@ -70,7 +70,14 @@
     throw_unless(error::swap_not_found, success);
     slice swap_cs = swap_data.begin_parse();
     slice fee_collector = swap_cs~load_msg_addr();
-    int fee_rate = swap_cs~load_uint(16);
+    slice jetton_wallet = swap_cs~load_msg_addr();
+    int fee_amount = swap_cs~load_coins();
 
-    ;; send_tokens();
+    slice user = ref_ds~load_msg_addr();
+
+    ;; Send fee to collector
+    send_tokens(jetton_wallet, fee_collector, fee_amount, my_address(), 0);
+
+    ;; Send jetton to user
+    send_tokens(to_jetton_wallet, user, jetton_amount, my_address(), 0);
 }

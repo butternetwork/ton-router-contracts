@@ -33,7 +33,7 @@ slice calculate_user_jetton_wallet_address(slice owner_address, slice jetton_mas
     return calculate_jetton_wallet_address(calculate_jetton_wallet_state_init(owner_address, jetton_master_address, JETTON_WALLET_CODE));
 }
 
-() send_tokens(slice token_wallet, slice to_address, int amount, slice response_address, int query_id) impure {
+() send_tokens(slice jetton_wallet, slice to_address, int amount, slice response_address, int query_id) impure {
     cell msg_body = begin_cell()
         .store_uint(0xf8a7ea5, 32)  ;; op::transfer in Jetton standard
         .store_uint(query_id, 64)
@@ -47,7 +47,7 @@ slice calculate_user_jetton_wallet_address(slice owner_address, slice jetton_mas
 
     cell msg = begin_cell()
         .store_uint(0x18, 6)
-        .store_slice(token_wallet)
+        .store_slice(jetton_wallet)
         .store_coins(50000000)  ;; 0.05 TON for fees
         .store_uint(1, 1 + 4 + 4 + 64 + 32 + 1 + 1)
         .store_ref(msg_body)
