@@ -8,34 +8,7 @@
 #include "swap.func";
 #include "admin.func";
 #include "utils.func";
-
-;; storage variables
-
-;; id is required to be able to create different instances of counters
-;; since addresses in TON depend on the initial state of the contract
-const int ctx_chain_pool_id = 70;
-
-;; This operation is called when the contract receives a notification about a token transfer
-() handle_transfer_notification(slice sender_address, slice in_msg_body) impure {
-    (int jetton_amount, slice from_user) = (in_msg_body~load_coins(), in_msg_body~load_msg_addr());
-
-    cell ref_cs = in_msg_body~load_ref();
-    slice ref_ds = ref_cs.begin_parse();
-    int action_op = ref_ds~load_uint(32);
-
-    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
-
-    if (action_op == op::swap_from_jetton) {
-        handle_swap_from_jetton(jetton_amount, ref_ds, sender_address);
-    } elseif (action_op == op::swap_callback) {
-        handle_swap_callback(jetton_amount, sender_address, ref_ds);
-    } elseif (action_op == op::bridge_out) {
-        slice bridge_token_address = calculate_user_jetton_wallet_address(my_address(), USDT_MASTER_ADDRESS);
-        handle_bridge_out(jetton_amount, bridge_token_address, ctx_chain_pool_id, order_id, ref_ds, sender_address);
-    } else {
-        throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
-    }
-}
+#include "jetton.func";
 
 ;; recv_internal is the main function of the contract and is called when it receives a message from other contracts
 () recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {

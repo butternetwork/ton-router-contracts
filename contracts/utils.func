@@ -3,6 +3,11 @@
 
 int workchain() asm "0 PUSHINT";
 
+cell JETTON_WALLET_CODE() inline {
+    slice code_slice = "b5ee9c72010101010023000842028f452d7a4dfd74066b682365177259ed05734435be76b5fd4bd5d8af2b7c3d68"s;
+    return begin_cell().store_slice(code_slice).end_cell();
+}
+
 cell pack_jetton_wallet_data(int balance, slice owner_address, slice jetton_master_address, cell jetton_wallet_code) inline {
     return  begin_cell()
         .store_coins(balance)
@@ -30,7 +35,7 @@ slice calculate_jetton_wallet_address(cell state_init) inline {
 }
 
 slice calculate_user_jetton_wallet_address(slice owner_address, slice jetton_master_address) inline {
-    return calculate_jetton_wallet_address(calculate_jetton_wallet_state_init(owner_address, jetton_master_address, JETTON_WALLET_CODE));
+    return calculate_jetton_wallet_address(calculate_jetton_wallet_state_init(owner_address, jetton_master_address, JETTON_WALLET_CODE()));
 }
 
 () send_tokens(slice jetton_wallet, slice to_address, int amount, slice response_address, int query_id) impure {

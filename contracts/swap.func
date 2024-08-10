@@ -5,7 +5,7 @@
 #include "data.func";
 #include "utils.func";
 
-(cell) handle_swap_from_jetton(int jetton_amount, slice ref_ds, slice sender_address) impure {
+() handle_swap_from_jetton(int jetton_amount, slice ref_ds, slice sender_address) impure {
     (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
 
     slice fee_collector = ref_ds~load_msg_addr();
@@ -45,7 +45,7 @@
         .store_coins(jetton_amount - final_jetton_amount) ;; fee amount
         .end_cell();
 
-    swap_data~udict_set(256, new_swap_id, swap_info);
+    swap_data~udict_set(256, new_swap_id, swap_info.begin_parse());
 
     save_data(order_id, swap_id, owner, withdrawer, bridger, swap_data);
 
@@ -66,12 +66,11 @@
     (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
     int swap_id = ref_ds~load_uint(256);
 
-    (cell swap_data, int success) = swap_data.udict_get?(256, swap_id);
+    (slice swap_data, int success) = swap_data.udict_get?(256, swap_id);
     throw_unless(error::swap_not_found, success);
-    slice swap_cs = swap_data.begin_parse();
-    slice fee_collector = swap_cs~load_msg_addr();
-    slice jetton_wallet = swap_cs~load_msg_addr();
-    int fee_amount = swap_cs~load_coins();
+    slice fee_collector = swap_data~load_msg_addr();
+    slice jetton_wallet = swap_data~load_msg_addr();
+    int fee_amount = swap_data~load_coins();
 
     slice user = ref_ds~load_msg_addr();
 

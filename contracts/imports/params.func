@@ -21,5 +21,5 @@ const op::bridger::bridge_in = "op::bridger::bridge_in"c; ;; f361efcb
 
 const int min_ton_bridge_out_amount = 100000000;
 
+const int CHAIN_POOL_ID = 70;
 const slice USDT_MASTER_ADDRESS = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs";
-const slice JETTON_WALLET_CODE = "b5ee9c72010101010023000842028f452d7a4dfd74066b682365177259ed05734435be76b5fd4bd5d8af2b7c3d68";
