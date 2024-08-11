@@ -14,15 +14,12 @@
     slice ref_ds = ref_cs.begin_parse();
     int action_op = ref_ds~load_uint(32);
 
-    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) = load_data();
-
     if (action_op == op::swap_from_jetton) {
         handle_swap_from_jetton(jetton_amount, ref_ds, sender_address);
     } elseif (action_op == op::swap_callback) {
         handle_swap_callback(jetton_amount, sender_address, ref_ds);
     } elseif (action_op == op::bridge_out) {
-        slice bridge_token_address = calculate_user_jetton_wallet_address(my_address(), USDT_MASTER_ADDRESS);
-        handle_bridge_out(jetton_amount, bridge_token_address, CHAIN_POOL_ID, order_id, ref_ds, sender_address);
+        handle_bridge_out(jetton_amount, sender_address, ref_ds);
     } else {
         throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
     }

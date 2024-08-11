@@ -1,7 +1,7 @@
 #include "imports/stdlib.fc";
 
 ;; load_data populates storage variables using stored data
-(int, int, slice, slice, slice, cell) load_data() impure {
+(int, int, slice, slice, slice) load_data() impure {
     var ds = get_data().begin_parse();
 
     ;; Order ID, used to track bridge operations (ton -> other chain)
@@ -17,15 +17,13 @@
     slice bridger = addresses_slice~load_msg_addr();
     addresses_slice.end_parse();
 
-    cell swap_data = ds.slice_refs_empty?() ? new_dict() : ds~load_ref();
-
     ds.end_parse();
 
-    return (order_id, swap_id, owner, withdrawer, bridger, swap_data);
+    return (order_id, swap_id, owner, withdrawer, bridger);
 }
 
 ;; save_data stores storage variables as a cell into persistent storage
-() save_data(int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, cell swap_data) impure {
+() save_data(int order_id, int swap_id, slice owner, slice withdrawer, slice bridger) impure {
     set_data(
         begin_cell()
             .store_uint(order_id, 64)
@@ -36,7 +34,6 @@
                 .store_slice(bridger)
                 .end_cell()
             )
-            .store_ref(swap_data)
             .end_cell()
     );
 }
