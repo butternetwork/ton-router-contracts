@@ -19,7 +19,7 @@
 
 ;; This sub-operation initiates a bridge operation from this chain to another chain
 () handle_bridge_out(int jetton_amount, slice sender_address, slice ref_ds) impure {
-    slice bridge_token_address = calculate_user_jetton_wallet_address(my_address(), USDT_MASTER_ADDRESS);
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, slice bridge_token_address) = load_data();
 
     ;; sender must be USDT jetton wallet of this contract
     throw_unless(error::unauthorized_transfer, equal_slice_bits(bridge_token_address, sender_address));
@@ -35,8 +35,8 @@
 
     ;; Parse to data
     int to_chain_id = to_ds~load_uint(64);
-    int receiver = to_ds~load_uint(384);
-    int dest_token_out_address = to_ds~load_uint(384);
+    cell receiver = to_ds~load_ref();
+    cell dest_token_out_address = to_ds~load_ref();
 
     ;; Parse fee data
     slice fee_collector = fee_ds~load_msg_addr();
@@ -47,8 +47,6 @@
     }
 
     int fee_amount = muldiv(jetton_amount, fee_ratio, 10000);
-
-    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger) = load_data();
 
     ;; Increment order ID
     int new_order_id = order_id + 1;
@@ -63,8 +61,8 @@
 
     builder to_ref = begin_cell()
         .store_uint(to_chain_id, 64)
-        .store_uint(receiver, 384)
-        .store_uint(dest_token_out_address, 384);
+        .store_ref(receiver)
+        .store_ref(dest_token_out_address);
 
     if (fee_ratio > 0) {
         send_tokens(bridge_token_address, fee_collector, fee_amount, my_address(), 0);
@@ -78,5 +76,5 @@
             .store_uint(jetton_amount - fee_amount, 32)
             .end_cell(), 0);
 
-    save_data(new_order_id, swap_id, owner, withdrawer, bridger);
+    save_data(new_order_id, swap_id, owner, withdrawer, bridger, bridge_token_address);
 }

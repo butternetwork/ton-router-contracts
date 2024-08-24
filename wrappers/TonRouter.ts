@@ -30,7 +30,7 @@ export function tonRouterConfigToCell(config: TonRouterConfig): Cell {
 
 export const Opcodes = {
     increase: 0x7e8764ef,
-    withdraw: 0xcb03bfaf,
+    withdraw: 0x9cd685eb,
     withdrawJetton: 0x24edca2a,
     swap: 0xca2663c4,
     updateAddress: 0x26c64b3c,

@@ -38,7 +38,7 @@
 }
 
 () handle_swap_callback(int jetton_amount, slice sender_address, slice ref_ds) impure {
-    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger) = load_data();
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, slice bridge_token_address) = load_data();
 
     slice fee_collector = ref_ds~load_msg_addr();
     int fee_ratio = ref_ds~load_uint(16);
@@ -66,6 +66,6 @@
             .store_uint(jetton_amount - fee_amount, 32)
             .end_cell(), 0);
 
-    save_data(order_id, new_swap_id, owner, withdrawer, bridger);
+    save_data(order_id, new_swap_id, owner, withdrawer, bridger, bridge_token_address);
 
 }

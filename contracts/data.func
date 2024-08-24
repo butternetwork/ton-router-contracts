@@ -1,29 +1,27 @@
 #include "imports/stdlib.fc";
 
 ;; load_data populates storage variables using stored data
-(int, int, slice, slice, slice) load_data() impure {
+(int, int, slice, slice, slice, slice) load_data() impure {
     var ds = get_data().begin_parse();
 
     ;; Order ID, used to track bridge operations (ton -> other chain)
     int order_id = ds~load_uint(64);
     int swap_id = ds~load_uint(64);
-    ;; Contract owner address
-    slice owner = ds~load_msg_addr();
+    slice owner = ds~load_msg_addr(); ;; Contract owner address
 
     var addresses_slice = ds~load_ref().begin_parse();
-    ;; Authorized address for withdrawal operations
-    slice withdrawer = addresses_slice~load_msg_addr();
-    ;; Authorized address for bridge in operations (other chain -> ton)
-    slice bridger = addresses_slice~load_msg_addr();
+    slice withdrawer = addresses_slice~load_msg_addr(); ;; Authorized address for withdrawal operations
+    slice bridger = addresses_slice~load_msg_addr(); ;; Authorized address for bridge in operations (other chain -> ton)
+    slice bridge_token_address = addresses_slice~load_msg_addr();
     addresses_slice.end_parse();
 
     ds.end_parse();
 
-    return (order_id, swap_id, owner, withdrawer, bridger);
+    return (order_id, swap_id, owner, withdrawer, bridger, bridge_token_address);
 }
 
 ;; save_data stores storage variables as a cell into persistent storage
-() save_data(int order_id, int swap_id, slice owner, slice withdrawer, slice bridger) impure {
+() save_data(int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, slice bridge_token_address) impure {
     set_data(
         begin_cell()
             .store_uint(order_id, 64)
@@ -32,6 +30,7 @@
             .store_ref(begin_cell()
                 .store_slice(withdrawer)
                 .store_slice(bridger)
+                .store_slice(bridge_token_address)
                 .end_cell()
             )
             .end_cell()

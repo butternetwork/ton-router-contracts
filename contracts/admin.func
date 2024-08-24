@@ -6,21 +6,22 @@
 
 ;; This admin operation allows updating of authorized addresses for various roles
 () handle_update_address(slice sender_address, slice in_msg_body) impure  {
-    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger) = load_data();
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, slice bridge_token_address) = load_data();
     throw_unless(error::unauthorized_update_address, equal_slice_bits(owner, sender_address));
     slice new_withdrawer = in_msg_body~load_msg_addr();
     slice new_bridger = in_msg_body~load_msg_addr();
+    slice new_bridge_token_address = in_msg_body~load_msg_addr();
 
-    save_data(order_id, swap_id, owner, new_withdrawer, new_bridger);
+    save_data(order_id, swap_id, owner, new_withdrawer, new_bridger, new_bridge_token_address);
 }
 
 ;; This admin operation allows transferring ownership of the contract to a new address
 () handle_update_owner(slice sender_address, slice in_msg_body) impure {
-    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger) = load_data();
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, slice bridge_token_address) = load_data();
     throw_unless(error::unauthorized_update_address, equal_slice_bits(owner, sender_address));
     slice new_owner = in_msg_body~load_msg_addr();
 
-    save_data(order_id, swap_id, new_owner, withdrawer, bridger);
+    save_data(order_id, swap_id, new_owner, withdrawer, bridger, bridge_token_address);
 }
 
 ;; This operation allows the authorized withdrawer to withdraw native TON coins

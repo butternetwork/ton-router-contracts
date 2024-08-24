@@ -26,7 +26,7 @@
     int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
     int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
 
-    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger) = load_data();
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, slice bridge_token_address) = load_data();
 
     if (op == op::swap_from_ton) {
         handle_swap_from_ton(msg_value, in_msg_body);
@@ -52,21 +52,22 @@
 ;; note that unlike in many other smart contract VMs, get methods cannot be called by other contracts
 
 slice get_bridge_token_address() method_id {
-    return calculate_user_jetton_wallet_address(my_address(), USDT_MASTER_ADDRESS);
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, slice bridge_token_address) = load_data();
+    return bridge_token_address;
 }
 
 slice get_withdrawer() method_id {
-    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger) = load_data();
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, slice bridge_token_address) = load_data();
     return withdrawer;
 }
 
 slice get_owner() method_id {
-    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger) = load_data();
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, slice bridge_token_address) = load_data();
     return owner;
 }
 
 slice get_bridger() method_id {
-    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger) = load_data();
+    (int order_id, int swap_id, slice owner, slice withdrawer, slice bridger, slice bridge_token_address) = load_data();
     return bridger;
 }
 
