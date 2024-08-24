@@ -14,23 +14,7 @@ export async function run(provider: NetworkProvider, args: string[]) {
 
     const tonRouter = provider.open(TonRouter.createFromAddress(address));
 
-    const counterBefore = await tonRouter.getCounter();
-
     await tonRouter.sendWithdraw(provider.sender(), {
         value: toNano('0.01'),
     });
-
-    ui.write('Waiting for counter to increase...');
-
-    let counterAfter = await tonRouter.getCounter();
-    let attempt = 1;
-    while (counterAfter === counterBefore) {
-        ui.setActionPrompt(`Attempt ${attempt}`);
-        await sleep(2000);
-        counterAfter = await tonRouter.getCounter();
-        attempt++;
-    }
-
-    ui.clearActionPrompt();
-    ui.write('Counter increased successfully!');
 }
